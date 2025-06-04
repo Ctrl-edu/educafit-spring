@@ -1,5 +1,6 @@
 package com.example.demo.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -26,12 +27,13 @@ public class Usuario {
     private String ubicacion;
 
     @Column
-    private String objetivosSalud;
+    private String objetivos;
 
     @Column
     private String correo;
 
     @Column (name="contraseña")
+    @JsonIgnore  // para no incluir en la respuesta del json
     private String contrasena;
 
     public int getID_usuario() {
@@ -66,12 +68,12 @@ public class Usuario {
         this.ubicacion = ubicacion;
     }
 
-    public String getObjetivos_salud() {
-        return objetivosSalud;
+    public String getObjetivos() {
+        return objetivos;
     }
 
-    public void setObjetivos_salud(String objetivosSalud) {
-        this.objetivosSalud = objetivosSalud;
+    public void setObjetivos(String objetivos) {
+        this.objetivos = objetivos;
     }
 
     public String getApellido() {

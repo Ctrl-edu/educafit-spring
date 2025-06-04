@@ -6,8 +6,11 @@ import com.example.demo.repository.UsuarioRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import at.favre.lib.crypto.bcrypt.BCrypt;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -15,6 +18,8 @@ import java.util.Optional;
 public class UsuarioServices {
 
     private final UsuarioRepository usuarioRepository;
+    private static final Logger log = LoggerFactory.getLogger(UsuarioServices.class);
+
 
     @Autowired
     public UsuarioServices(UsuarioRepository usuarioRepository) {
@@ -25,70 +30,114 @@ public class UsuarioServices {
         return usuarioRepository.findAll();
     }
 
-    public void eliminarUsuario(Integer idUsuario) {
-        Optional<Usuario> usuarioEncontrado = usuarioRepository.findById(idUsuario);
+    public void eliminarUsuario(String correo) {
+        log.info("Buscando al usuario: {}", correo);
+        Optional<Usuario> usuarioEncontrado = usuarioRepository.findByCorreo(correo);
         if (usuarioEncontrado.isPresent()) {
+            log.info("Se ha encontrado el usuario: {}", usuarioEncontrado.get().getNombre());
             Usuario usuarioAEliminar = usuarioEncontrado.get();
             usuarioRepository.delete(usuarioAEliminar);
+            log.info("Se ha eliminado el usuario: {}", correo);
+
         } else {
-            System.out.println("No se encontro el usuario en la base de datos");
+            log.warn("No se encontro el usuario en la base de datos");
         }
 
     }
+
+    //metodo para actualizar
+    public Usuario actualizarUsuario(String correo, Usuario usuarioActualizado) {
+        Optional<Usuario> usuarioExistente = usuarioRepository.findByCorreo(correo);
+        if (usuarioExistente.isEmpty()) {
+            throw new IllegalArgumentException("Usuario no encontrado");
+        }
+        // Actualizo los campos necesarios
+        Usuario usuario = usuarioExistente.get();
+        usuario.setNombre(usuarioActualizado.getNombre());
+        usuario.setApellido(usuarioActualizado.getApellido());
+        usuario.setGenero(usuarioActualizado.getGenero());
+        usuario.setUbicacion(usuarioActualizado.getUbicacion());
+        usuario.setObjetivos(usuarioActualizado.getObjetivos());
+
+        return usuarioRepository.save(usuario);
+    }
+
 
     // este metodo es igual a como si tuviera uno llamado guardarUsuario
     public void registroUsuario(Usuario usuario) throws Exception {
-        Usuario usuarioEncontrado = usuarioRepository.findByCorreo(usuario.getCorreo());
-        if (usuarioEncontrado != null) {
-            throw new Exception("Ya existe un usuario con el correo: " + usuario.getCorreo());
+        log.info("Registrando al usuario: {}", usuario.getCorreo());
+        List<String> errores = new ArrayList<>();
+
+        Optional<Usuario> usuarioEncontrado = usuarioRepository.findByCorreo(usuario.getCorreo());
+        if (usuarioEncontrado.isPresent()) {
+            errores.add("Ya existe un usuario con el correo: " + usuario.getCorreo());
         }
         if (usuario.getNombre() == null || usuario.getNombre().trim().isEmpty()) {
-            throw new IllegalArgumentException("El nombre no puede estar vacío.");
+            errores.add("El nombre no puede estar vacío.");
         }
         if (usuario.getApellido() == null || usuario.getApellido().trim().isEmpty()) {
-            throw new IllegalArgumentException("El apellido no puede estar vacío.");
+            errores.add("El apellido no puede estar vacío.");
         }
         if (usuario.getGenero() == null || usuario.getGenero().trim().isEmpty()) {
-            throw new IllegalArgumentException("El género no puede estar vacío.");
+            errores.add("El género no puede estar vacío.");
         }
         if (usuario.getUbicacion() == null || usuario.getUbicacion().trim().isEmpty()) {
-            throw new IllegalArgumentException("La ubicación no puede estar vacía.");
+            errores.add("La ubicación no puede estar vacía.");
         }
-        if (usuario.getObjetivos_salud() == null || usuario.getObjetivos_salud().trim().isEmpty()) {
-            throw new IllegalArgumentException("Los objetivos de salud no estar vacíos.");
+        if (usuario.getObjetivos() == null || usuario.getObjetivos().trim().isEmpty()) {
+            errores.add("Los objetivos no pueden estar vacíos.");
         }
         if (usuario.getCorreo() == null || usuario.getCorreo().trim().isEmpty()) {
-            throw new IllegalArgumentException("El correo no puede estar vacío.");
+            errores.add("El correo no puede estar vacío.");
         }
         if (usuario.getContraseña() == null || usuario.getContraseña().trim().isEmpty()) {
-            throw new IllegalArgumentException("La contraseña no puede estar vacía.");
+            errores.add("La contraseña no puede estar vacía.");
+        }
+        if (usuario.getContraseña().length() < 8) {
+            errores.add("La contraseña debe tener mas de 8 caracteres.");
+        }
+
+        // Si hay errores, se lanza excepción con todos ellos
+        if (!errores.isEmpty()) {
+            throw new IllegalArgumentException(String.join("", errores));
         }
 
         // encriptando la contraseña con la que se registra el usuario
+        log.info("Encriptando password..");
         String passwordEncriptada = BCrypt.withDefaults().hashToString(12, usuario.getContraseña().toCharArray());
+        log.info("Password encriptada..");
+
         usuario.setContraseña(passwordEncriptada);
+
         usuarioRepository.save(usuario);
+        log.info("Usuario: {} guardado exitosamente", usuario.getCorreo());
 
     }
 
-    public boolean loginUsuario(LoginDTO loginDTO) throws Exception {
+    public Usuario loginUsuario(LoginDTO loginDTO) throws Exception {
+        List<String> errores = new ArrayList<>();
+
         if (loginDTO.getContraseña() == null || loginDTO.getContraseña().trim().isEmpty()) {
-            throw new IllegalArgumentException("La contraseña no puede estar vacía.");
+            errores.add("La contraseña no puede estar vacía.");
         }
 
         if (loginDTO.getCorreo() == null || loginDTO.getCorreo().trim().isEmpty()) {
-            throw new IllegalArgumentException("El correo no puede estar vacío.");
+            errores.add("El correo no puede estar vacío.");
         }
 
-        Usuario usuarioABuscar = usuarioRepository.findByCorreo(loginDTO.getCorreo());
-        if (usuarioABuscar == null) {
-            throw new Exception("No existe un usuario registrado con el email: " + loginDTO.getCorreo());
+        if (!errores.isEmpty()) {
+            throw new IllegalArgumentException(String.join("", errores));
+        }
+
+        Optional<Usuario> usuarioBuscar = usuarioRepository.findByCorreo(loginDTO.getCorreo());
+        if (usuarioBuscar.isEmpty()) {
+            throw new Exception("usuario o contraseña incorrectos");
         } else {
-            boolean isPassword = BCrypt.verifyer().verify(loginDTO.getContraseña().toCharArray(), usuarioABuscar.getContraseña()).verified;
+            boolean isPassword = BCrypt.verifyer().verify(loginDTO.getContraseña().toCharArray(), usuarioBuscar.get().getContraseña()).verified; //devuelve un true o false dependiendo si es la misma pass o no
             if (isPassword) {
-                return isPassword;
+                return usuarioBuscar.get();
             } else {
-                return false;
+                return null;
             }
         }
     }
